@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sun/Shade Simulator</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #f5f5f5; color: #333; }
+
+#toolbar {
+  display: flex; align-items: center; gap: 12px; padding: 8px 14px;
+  background: #fff; border-bottom: 1px solid #ddd; flex-wrap: wrap; flex-shrink: 0;
+  font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+#toolbar label { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+#toolbar input[type="number"], #toolbar input[type="date"] {
+  width: 90px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px;
+  background: #fff; color: #333; font-size: 13px;
+}
+#toolbar input[type="number"] { width: 70px; }
+#toolbar input[type="range"] { width: 160px; accent-color: #e67e22; }
+.toolbar-group { display: flex; align-items: center; gap: 6px; }
+.toolbar-divider { width: 1px; height: 28px; background: #ddd; margin: 0 4px; }
+
+button {
+  padding: 5px 12px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;
+  background: #fff; color: #333; font-size: 13px; transition: background 0.15s;
+}
+button:hover { background: #f0f0f0; }
+button.active { background: #e67e22; color: #fff; border-color: #e67e22; font-weight: 600; }
+button#btnDelete { background: #fff0f0; border-color: #e0a0a0; color: #c0392b; }
+button#btnDelete:hover { background: #ffe0e0; }
+button#btnLocation { background: #f0fff0; border-color: #a0d0a0; color: #27ae60; }
+
+#time-label { color: #e67e22; font-weight: 600; min-width: 72px; font-size: 14px; }
+#sun-info { color: #999; font-size: 11px; min-width: 100px; }
+
+canvas#canvas { flex: 1; display: block; background: #fff; }
+
+#object-form {
+  display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15); min-width: 240px; z-index: 10;
+}
+#object-form h3 { margin-bottom: 12px; color: #e67e22; font-size: 15px; }
+#object-form .field { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+#object-form .field label { color: #555; font-size: 13px; }
+#object-form .field input, #object-form .field select {
+  width: 100px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px;
+  background: #fff; color: #333; font-size: 13px;
+}
+#object-form .buttons { display: flex; gap: 8px; margin-top: 14px; }
+#object-form .buttons button { flex: 1; }
+#object-form .buttons button.primary { background: #e67e22; color: #fff; border-color: #e67e22; font-weight: 600; }
+
+/* Draw tree modal */
+#draw-modal {
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4); z-index: 20; justify-content: center; align-items: center;
+}
+#draw-modal.visible { display: flex; }
+#draw-panel {
+  background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+  display: flex; gap: 16px; max-width: 680px;
+}
+#draw-left { display: flex; flex-direction: column; gap: 12px; }
+#draw-left h3 { color: #2c6fbb; font-size: 16px; }
+#draw-left p { color: #777; font-size: 12px; line-height: 1.4; }
+#draw-canvas-wrap {
+  position: relative; border: 2px solid #ccc; border-radius: 6px; overflow: hidden;
+  background: #fafafa; cursor: crosshair;
+}
+#drawCanvas { display: block; }
+#draw-ground-label {
+  position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+  font-size: 10px; color: #aaa; pointer-events: none;
+}
+#draw-left .draw-fields { display: flex; gap: 10px; }
+#draw-left .draw-fields label { font-size: 12px; color: #555; }
+#draw-left .draw-fields input {
+  width: 70px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;
+}
+#draw-left .draw-buttons { display: flex; gap: 8px; }
+#draw-left .draw-buttons button { flex: 1; padding: 8px; }
+#draw-left .draw-buttons button.primary { background: #2c6fbb; color: #fff; border-color: #2c6fbb; font-weight: 600; }
+#draw-left .draw-buttons button.danger { background: #fff0f0; border-color: #e0a0a0; color: #c0392b; }
+
+/* Templates sidebar */
+#draw-right { display: flex; flex-direction: column; gap: 8px; width: 180px; flex-shrink: 0; }
+#draw-right h4 { color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+#template-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 380px; }
+.template-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid #e0e0e0;
+  border-radius: 6px; cursor: pointer; transition: all 0.15s; background: #fafafa;
+}
+.template-item:hover { background: #eef6ff; border-color: #a0c0e0; }
+.template-item canvas { flex-shrink: 0; }
+.template-item span { font-size: 12px; color: #444; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="toolbar-group">
+    <label>Lat</label>
+    <input type="number" id="inputLat" value="40.7128" step="0.0001">
+  </div>
+  <div class="toolbar-group">
+    <label>Lng</label>
+    <input type="number" id="inputLng" value="-74.006" step="0.0001">
+  </div>
+  <button id="btnLocation" title="Use my location">📍 Locate</button>
+
+  <div class="toolbar-divider"></div>
+
+  <div class="toolbar-group">
+    <label>Date</label>
+    <input type="date" id="inputDate">
+  </div>
+  <div class="toolbar-group">
+    <label>Time</label>
+    <input type="range" id="inputTime" min="300" max="1260" value="720" step="1">
+    <span id="time-label">12:00 PM</span>
+  </div>
+
+  <div class="toolbar-divider"></div>
+
+  <button id="btnHouse" class="tool-btn" data-type="house">🏠 House</button>
+  <button id="btnTree">🌳 Tree</button>
+  <button id="btnFence" class="tool-btn" data-type="fence">🪵 Fence</button>
+  <button id="btnDelete">🗑 Delete</button>
+
+  <div class="toolbar-divider"></div>
+  <span id="sun-info"></span>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<div id="object-form">
+  <h3 id="form-title">Place House</h3>
+  <div id="form-fields"></div>
+  <div class="buttons">
+    <button class="primary" id="btnPlace">Place</button>
+    <button id="btnCancel">Cancel</button>
+  </div>
+</div>
+
+<!-- Draw tree modal -->
+<div id="draw-modal">
+  <div id="draw-panel">
+    <div id="draw-left">
+      <h3>Draw Tree Silhouette</h3>
+      <p>Draw the side profile or pick a template. Bottom edge = ground.</p>
+      <div id="draw-canvas-wrap">
+        <canvas id="drawCanvas" width="340" height="300"></canvas>
+        <span id="draw-ground-label">— ground —</span>
+      </div>
+      <div class="draw-fields">
+        <div>
+          <label>Height (ft)</label><br>
+          <input type="number" id="draw-height" value="25" min="1" step="1">
+        </div>
+        <div>
+          <label>Max Width (ft)</label><br>
+          <input type="number" id="draw-width" value="20" min="1" step="1">
+        </div>
+      </div>
+      <div class="draw-buttons">
+        <button class="primary" id="btnDrawDone">Place Tree</button>
+        <button class="danger" id="btnDrawClear">Clear</button>
+        <button id="btnDrawCancel">Cancel</button>
+      </div>
+    </div>
+    <div id="draw-right">
+      <h4>Templates</h4>
+      <div id="template-list"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const objectForm = document.getElementById('object-form');
+const UNIT = 'ft';
+
+// ===================== TREE TEMPLATES =====================
+// Points define side silhouettes on 340x300 canvas. Ground = y:299.
+const TREE_TEMPLATES = [
+  {
+    name: 'Oak',
+    height: 30, width: 28,
+    points: [
+      {x:155,y:299},{x:155,y:185},{x:130,y:182},{x:105,y:170},{x:80,y:155},
+      {x:60,y:140},{x:42,y:125},{x:35,y:108},{x:38,y:90},{x:48,y:78},
+      {x:42,y:68},{x:50,y:52},{x:65,y:42},{x:75,y:48},{x:85,y:38},
+      {x:100,y:28},{x:115,y:22},{x:110,y:15},{x:125,y:8},{x:145,y:12},
+      {x:155,y:6},{x:170,y:10},{x:185,y:5},{x:200,y:12},{x:210,y:8},
+      {x:225,y:15},{x:235,y:22},{x:248,y:28},{x:258,y:38},{x:268,y:48},
+      {x:278,y:42},{x:292,y:52},{x:298,y:68},{x:302,y:78},{x:305,y:90},
+      {x:302,y:108},{x:298,y:125},{x:280,y:140},{x:260,y:155},{x:240,y:168},
+      {x:215,y:178},{x:195,y:182},{x:185,y:185},{x:185,y:299},
+    ],
+  },
+  {
+    name: 'Pine',
+    height: 35, width: 18,
+    points: [
+      {x:160,y:299},{x:160,y:260},{x:80,y:250},{x:110,y:200},{x:75,y:195},
+      {x:105,y:150},{x:85,y:145},{x:115,y:100},{x:100,y:95},{x:130,y:50},
+      {x:145,y:20},{x:170,y:5},{x:195,y:20},{x:210,y:50},{x:240,y:95},
+      {x:225,y:100},{x:255,y:145},{x:235,y:150},{x:265,y:195},{x:230,y:200},
+      {x:260,y:250},{x:180,y:260},{x:180,y:299},
+    ],
+  },
+  {
+    name: 'Palm',
+    height: 30, width: 15,
+    points: [
+      {x:162,y:299},{x:160,y:100},{x:120,y:85},{x:75,y:65},{x:60,y:50},
+      {x:80,y:40},{x:100,y:55},{x:135,y:50},{x:120,y:30},{x:130,y:15},
+      {x:155,y:25},{x:155,y:10},{x:170,y:5},{x:185,y:10},{x:185,y:25},
+      {x:210,y:15},{x:220,y:30},{x:205,y:50},{x:240,y:55},{x:260,y:40},
+      {x:280,y:50},{x:265,y:65},{x:220,y:85},{x:180,y:100},{x:178,y:299},
+    ],
+  },
+  {
+    name: 'Willow',
+    height: 25, width: 30,
+    points: [
+      {x:158,y:299},{x:158,y:160},{x:100,y:150},{x:60,y:130},{x:35,y:100},
+      {x:25,y:200},{x:40,y:250},{x:55,y:260},{x:50,y:180},{x:45,y:80},
+      {x:70,y:50},{x:110,y:25},{x:170,y:15},{x:230,y:25},{x:270,y:50},
+      {x:295,y:80},{x:290,y:180},{x:285,y:260},{x:300,y:250},{x:315,y:200},
+      {x:305,y:100},{x:280,y:130},{x:240,y:150},{x:182,y:160},{x:182,y:299},
+    ],
+  },
+  {
+    name: 'Cypress',
+    height: 35, width: 8,
+    points: [
+      {x:155,y:299},{x:150,y:250},{x:135,y:200},{x:125,y:150},{x:120,y:100},
+      {x:130,y:60},{x:145,y:25},{x:160,y:8},{x:170,y:5},{x:180,y:8},
+      {x:195,y:25},{x:210,y:60},{x:220,y:100},{x:215,y:150},{x:205,y:200},
+      {x:190,y:250},{x:185,y:299},
+    ],
+  },
+  {
+    name: 'Maple',
+    height: 28, width: 22,
+    points: [
+      {x:155,y:299},{x:155,y:172},{x:132,y:168},{x:110,y:158},{x:90,y:142},
+      {x:78,y:130},{x:68,y:115},{x:62,y:98},{x:65,y:82},{x:72,y:70},
+      {x:65,y:60},{x:70,y:48},{x:82,y:38},{x:90,y:42},{x:98,y:32},
+      {x:112,y:22},{x:105,y:16},{x:118,y:10},{x:135,y:14},{x:145,y:8},
+      {x:160,y:12},{x:170,y:6},{x:180,y:12},{x:195,y:8},{x:205,y:14},
+      {x:222,y:10},{x:235,y:16},{x:228,y:22},{x:242,y:32},{x:250,y:42},
+      {x:258,y:38},{x:270,y:48},{x:275,y:60},{x:268,y:70},{x:278,y:82},
+      {x:278,y:98},{x:272,y:115},{x:262,y:130},{x:250,y:142},{x:230,y:158},
+      {x:208,y:168},{x:185,y:172},{x:185,y:299},
+    ],
+  },
+  {
+    name: 'Spruce',
+    height: 40, width: 14,
+    points: [
+      {x:162,y:299},{x:162,y:270},{x:100,y:262},{x:130,y:225},{x:90,y:218},
+      {x:120,y:180},{x:95,y:174},{x:125,y:135},{x:110,y:130},{x:135,y:90},
+      {x:125,y:85},{x:148,y:45},{x:155,y:20},{x:170,y:5},{x:185,y:20},
+      {x:192,y:45},{x:215,y:85},{x:205,y:90},{x:230,y:130},{x:218,y:135},
+      {x:245,y:174},{x:220,y:180},{x:250,y:218},{x:210,y:225},{x:240,y:262},
+      {x:178,y:270},{x:178,y:299},
+    ],
+  },
+  {
+    name: 'Magnolia',
+    height: 22, width: 18,
+    points: [
+      {x:158,y:299},{x:148,y:268},{x:120,y:255},{x:98,y:235},{x:82,y:210},
+      {x:70,y:185},{x:62,y:158},{x:58,y:130},{x:60,y:105},{x:65,y:82},
+      {x:72,y:62},{x:85,y:44},{x:100,y:32},{x:118,y:22},{x:138,y:14},
+      {x:158,y:10},{x:170,y:8},{x:182,y:10},{x:202,y:14},{x:222,y:22},
+      {x:240,y:32},{x:255,y:44},{x:268,y:62},{x:275,y:82},{x:280,y:105},
+      {x:282,y:130},{x:278,y:158},{x:270,y:185},{x:258,y:210},{x:242,y:235},
+      {x:220,y:255},{x:192,y:268},{x:182,y:299},
+    ],
+  },
+];
+
+// ===================== STATE =====================
+const state = {
+  panX: 0, panY: 0, zoom: 12,
+  lat: 40.7128, lng: -74.006,
+  date: new Date().toISOString().split('T')[0],
+  timeMinutes: 720,
+  objects: [],
+  selectedId: null,
+  placingType: null,
+  placingPos: null,
+  isPanning: false,
+  isDragging: false,
+  isRotating: false,
+  isScaling: false,
+  scaleEnd: 0, // -1 or 1 for which end of fence
+  dragObj: null,
+  dragOffsetX: 0, dragOffsetY: 0,
+  panStartX: 0, panStartY: 0,
+  panStartPanX: 0, panStartPanY: 0,
+  nextId: 1,
+  clipboard: null,
+  pendingCustomLayers: null,
+  pendingCustomOutline: null,
+};
+
+const ROTATE_HANDLE_DIST = 28;
+const ROTATE_HANDLE_R = 7;
+const SCALE_HANDLE_R = 6;
+
+// ===================== DRAW TREE MODAL =====================
+const drawModal = document.getElementById('draw-modal');
+const drawCanvas = document.getElementById('drawCanvas');
+const drawCtx = drawCanvas.getContext('2d');
+let isDrawingTree = false;
+let drawPoints = [];
+
+function initDrawModal() {
+  document.getElementById('btnTree').addEventListener('click', openDrawModal);
+  document.getElementById('btnDrawDone').addEventListener('click', finishDrawTree);
+  document.getElementById('btnDrawClear').addEventListener('click', clearDrawCanvas);
+  document.getElementById('btnDrawCancel').addEventListener('click', () => { drawModal.classList.remove('visible'); });
+
+  drawCanvas.addEventListener('mousedown', drawStart);
+  drawCanvas.addEventListener('mousemove', drawMove);
+  drawCanvas.addEventListener('mouseup', drawEnd);
+  drawCanvas.addEventListener('mouseleave', drawEnd);
+
+  buildTemplateList();
+}
+
+function buildTemplateList() {
+  const list = document.getElementById('template-list');
+  for (const tmpl of TREE_TEMPLATES) {
+    const item = document.createElement('div');
+    item.className = 'template-item';
+
+    // Thumbnail canvas
+    const tc = document.createElement('canvas');
+    tc.width = 40;
+    tc.height = 40;
+    const tctx = tc.getContext('2d');
+    drawTemplateThumbnail(tctx, tmpl, 40, 40);
+
+    const label = document.createElement('span');
+    label.textContent = tmpl.name;
+
+    item.appendChild(tc);
+    item.appendChild(label);
+    item.addEventListener('click', () => loadTemplate(tmpl));
+    list.appendChild(item);
+  }
+}
+
+function drawTemplateThumbnail(tctx, tmpl, w, h) {
+  // Find bounds of template points
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of tmpl.points) {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+  }
+  const pw = maxX - minX || 1;
+  const ph = maxY - minY || 1;
+  const scale = Math.min((w - 6) / pw, (h - 6) / ph);
+  const ox = (w - pw * scale) / 2 - minX * scale;
+  const oy = (h - ph * scale) / 2 - minY * scale;
+
+  tctx.fillStyle = 'rgba(80,160,80,0.5)';
+  tctx.strokeStyle = '#3a8a3a';
+  tctx.lineWidth = 1;
+  tctx.beginPath();
+  tctx.moveTo(tmpl.points[0].x * scale + ox, tmpl.points[0].y * scale + oy);
+  for (let i = 1; i < tmpl.points.length; i++) {
+    tctx.lineTo(tmpl.points[i].x * scale + ox, tmpl.points[i].y * scale + oy);
+  }
+  tctx.closePath();
+  tctx.fill();
+  tctx.stroke();
+}
+
+function loadTemplate(tmpl) {
+  drawPoints = tmpl.points.map(p => ({ x: p.x, y: p.y }));
+  document.getElementById('draw-height').value = tmpl.height;
+  document.getElementById('draw-width').value = tmpl.width;
+  redrawDrawCanvas();
+}
+
+function openDrawModal() {
+  state.placingType = null;
+  state.selectedId = null;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  canvas.style.cursor = 'default';
+  drawModal.classList.add('visible');
+  clearDrawCanvas();
+}
+
+function clearDrawCanvas() {
+  drawPoints = [];
+  redrawDrawCanvas();
+}
+
+function redrawDrawCanvas() {
+  const w = drawCanvas.width, h = drawCanvas.height;
+  drawCtx.clearRect(0, 0, w, h);
+
+  // Ground line
+  drawCtx.strokeStyle = '#ccc';
+  drawCtx.lineWidth = 1;
+  drawCtx.setLineDash([4, 4]);
+  drawCtx.beginPath();
+  drawCtx.moveTo(0, h - 1); drawCtx.lineTo(w, h - 1);
+  drawCtx.stroke();
+  drawCtx.setLineDash([]);
+
+  // Center guide
+  drawCtx.strokeStyle = '#eee';
+  drawCtx.lineWidth = 1;
+  drawCtx.setLineDash([4, 4]);
+  drawCtx.beginPath();
+  drawCtx.moveTo(w / 2, 0); drawCtx.lineTo(w / 2, h);
+  drawCtx.stroke();
+  drawCtx.setLineDash([]);
+
+  if (drawPoints.length > 2) {
+    drawCtx.fillStyle = 'rgba(80, 160, 80, 0.4)';
+    drawCtx.strokeStyle = '#3a8a3a';
+    drawCtx.lineWidth = 2;
+    drawCtx.beginPath();
+    drawCtx.moveTo(drawPoints[0].x, drawPoints[0].y);
+    for (let i = 1; i < drawPoints.length; i++) {
+      drawCtx.lineTo(drawPoints[i].x, drawPoints[i].y);
+    }
+    drawCtx.closePath();
+    drawCtx.fill();
+    drawCtx.stroke();
+  }
+}
+
+function drawStart(e) {
+  isDrawingTree = true;
+  drawPoints = [{ x: e.offsetX, y: e.offsetY }];
+}
+function drawMove(e) {
+  if (!isDrawingTree) return;
+  drawPoints.push({ x: e.offsetX, y: e.offsetY });
+  redrawDrawCanvas();
+}
+function drawEnd() {
+  if (!isDrawingTree) return;
+  isDrawingTree = false;
+}
+
+function sampleSilhouette() {
+  const w = drawCanvas.width, h = drawCanvas.height;
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tc = tmp.getContext('2d');
+  if (drawPoints.length < 3) return null;
+
+  tc.fillStyle = '#000';
+  tc.beginPath();
+  tc.moveTo(drawPoints[0].x, drawPoints[0].y);
+  for (let i = 1; i < drawPoints.length; i++) tc.lineTo(drawPoints[i].x, drawPoints[i].y);
+  tc.closePath();
+  tc.fill();
+
+  const imgData = tc.getImageData(0, 0, w, h).data;
+  let minY = h, maxY = 0, minX = w, maxX = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (imgData[(y * w + x) * 4 + 3] > 0) {
+        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      }
+    }
+  }
+  if (maxY <= minY) return null;
+  const dh = maxY - minY, dw = maxX - minX;
+  if (dw <= 0 || dh <= 0) return null;
+
+  const NUM = 14;
+  const layers = [];
+  for (let i = 0; i < NUM; i++) {
+    const frac = (i + 0.5) / NUM;
+    const scanY = Math.round(maxY - frac * dh);
+    if (scanY < 0 || scanY >= h) continue;
+    let left = w, right = 0;
+    for (let x = 0; x < w; x++) {
+      if (imgData[(scanY * w + x) * 4 + 3] > 0) { left = Math.min(left, x); right = Math.max(right, x); }
+    }
+    if (right <= left) continue;
+    layers.push({ hFrac: frac, rFrac: (right - left) / dw });
+  }
+  return layers.length > 0 ? layers : null;
+}
+
+function normalizeOutline(points) {
+  if (points.length < 3) return null;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+  }
+  const w = maxX - minX || 1, h = maxY - minY || 1;
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const s = Math.max(w, h) / 2;
+  return points.map(p => ({ x: (p.x - cx) / s, y: (p.y - cy) / s }));
+}
+
+function finishDrawTree() {
+  const layers = sampleSilhouette();
+  if (!layers) { alert('Please draw a tree shape first.'); return; }
+  state.pendingCustomLayers = layers;
+  state.pendingCustomOutline = normalizeOutline(drawPoints);
+  drawModal.classList.remove('visible');
+  state.placingType = 'tree';
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  canvas.style.cursor = 'crosshair';
+  render();
+}
+
+// ===================== MAIN APP =====================
+function init() {
+  document.getElementById('inputDate').value = state.date;
+  resizeCanvas();
+  window.addEventListener('resize', () => { resizeCanvas(); render(); });
+
+  document.getElementById('inputLat').addEventListener('input', e => { state.lat = parseFloat(e.target.value) || 0; render(); });
+  document.getElementById('inputLng').addEventListener('input', e => { state.lng = parseFloat(e.target.value) || 0; render(); });
+  document.getElementById('inputDate').addEventListener('input', e => { state.date = e.target.value; render(); });
+  document.getElementById('inputTime').addEventListener('input', e => {
+    state.timeMinutes = parseInt(e.target.value);
+    document.getElementById('time-label').textContent = formatTime(state.timeMinutes);
+    render();
+  });
+
+  document.getElementById('btnLocation').addEventListener('click', () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        state.lat = Math.round(pos.coords.latitude * 10000) / 10000;
+        state.lng = Math.round(pos.coords.longitude * 10000) / 10000;
+        document.getElementById('inputLat').value = state.lat;
+        document.getElementById('inputLng').value = state.lng;
+        render();
+      });
+    }
+  });
+
+  document.querySelectorAll('.tool-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.type;
+      if (state.placingType === type) {
+        state.placingType = null; btn.classList.remove('active'); canvas.style.cursor = 'default';
+      } else {
+        state.placingType = type;
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        canvas.style.cursor = 'crosshair';
+        state.selectedId = null; render();
+      }
+    });
+  });
+
+  document.getElementById('btnDelete').addEventListener('click', deleteSelected);
+  document.getElementById('btnPlace').addEventListener('click', placeObject);
+  document.getElementById('btnCancel').addEventListener('click', () => { objectForm.style.display = 'none'; });
+
+  canvas.addEventListener('mousedown', onMouseDown);
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mouseup', onMouseUp);
+  canvas.addEventListener('mouseleave', onMouseUp);
+  canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.style.cursor = 'default';
+
+  document.addEventListener('keydown', onKeyDown);
+  initDrawModal();
+  render();
+}
+
+function onKeyDown(e) {
+  if (e.key === 'Escape') {
+    state.placingType = null; state.selectedId = null;
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    objectForm.style.display = 'none';
+    drawModal.classList.remove('visible');
+    canvas.style.cursor = 'default'; render();
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedId !== null && objectForm.style.display === 'none') {
+    deleteSelected();
+  }
+  // Copy
+  if ((e.ctrlKey || e.metaKey) && e.key === 'c' && state.selectedId !== null) {
+    const obj = state.objects.find(o => o.id === state.selectedId);
+    if (obj) state.clipboard = JSON.parse(JSON.stringify(obj));
+  }
+  // Paste
+  if ((e.ctrlKey || e.metaKey) && e.key === 'v' && state.clipboard) {
+    const copy = JSON.parse(JSON.stringify(state.clipboard));
+    copy.id = state.nextId++;
+    copy.x += 3;
+    copy.y += 3;
+    state.objects.push(copy);
+    state.clipboard = copy; // so next paste offsets again
+    state.selectedId = copy.id;
+    render();
+  }
+}
+
+function deleteSelected() {
+  if (state.selectedId !== null) {
+    state.objects = state.objects.filter(o => o.id !== state.selectedId);
+    state.selectedId = null; render();
+  }
+}
+
+function resizeCanvas() { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; }
+
+function worldToScreen(wx, wy) {
+  return { x: (wx - state.panX) * state.zoom + canvas.width / 2, y: (wy - state.panY) * state.zoom + canvas.height / 2 };
+}
+function screenToWorld(sx, sy) {
+  return { x: (sx - canvas.width / 2) / state.zoom + state.panX, y: (sy - canvas.height / 2) / state.zoom + state.panY };
+}
+function formatTime(minutes) {
+  const h = Math.floor(minutes / 60), m = minutes % 60;
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
+// --- Sun ---
+function getSunPosition() {
+  const [yr, mo, dy] = state.date.split('-').map(Number);
+  return SunCalc.getPosition(new Date(yr, mo - 1, dy, Math.floor(state.timeMinutes / 60), state.timeMinutes % 60), state.lat, state.lng);
+}
+function getShadowVector(h) {
+  const sun = getSunPosition();
+  if (sun.altitude <= 0) return null;
+  const len = h / Math.tan(sun.altitude), b = sun.azimuth + Math.PI;
+  return { dx: -Math.sin(b) * len, dy: Math.cos(b) * len, altitude: sun.altitude };
+}
+function getShadowOffsetForHeight(h, alt, az) {
+  if (alt <= 0) return null;
+  const len = h / Math.tan(alt), b = az + Math.PI;
+  return { dx: -Math.sin(b) * len, dy: Math.cos(b) * len };
+}
+
+// --- Hit testing ---
+function hitTest(wx, wy) {
+  for (let i = state.objects.length - 1; i >= 0; i--) {
+    const o = state.objects[i];
+    if (o.type === 'house') {
+      const c = Math.cos(-o.angle), s = Math.sin(-o.angle);
+      const lx = (wx - o.x) * c - (wy - o.y) * s, ly = (wx - o.x) * s + (wy - o.y) * c;
+      if (Math.abs(lx) <= o.width / 2 && Math.abs(ly) <= o.depth / 2) return o;
+    } else if (o.type === 'tree') {
+      if (Math.hypot(wx - o.x, wy - o.y) <= o.radius) return o;
+    } else if (o.type === 'fence') {
+      const c = Math.cos(-o.angle), s = Math.sin(-o.angle);
+      const lx = (wx - o.x) * c - (wy - o.y) * s, ly = (wx - o.x) * s + (wy - o.y) * c;
+      if (Math.abs(lx) <= o.length / 2 && Math.abs(ly) <= 1) return o;
+    }
+  }
+  return null;
+}
+
+// --- Handles ---
+function getRotateHandlePos(obj) {
+  const s = worldToScreen(obj.x, obj.y);
+  let dist;
+  if (obj.type === 'house') dist = Math.max(obj.width, obj.depth) / 2 * state.zoom + ROTATE_HANDLE_DIST;
+  else if (obj.type === 'tree') dist = obj.radius * state.zoom + ROTATE_HANDLE_DIST;
+  else if (obj.type === 'fence') dist = obj.length / 2 * state.zoom + ROTATE_HANDLE_DIST;
+  const a = (obj.angle || 0) - Math.PI / 2;
+  return { x: s.x + Math.cos(a) * dist, y: s.y + Math.sin(a) * dist };
+}
+
+function getFenceScaleHandles(obj) {
+  const c = Math.cos(obj.angle), s = Math.sin(obj.angle), hl = obj.length / 2;
+  return [
+    worldToScreen(obj.x - hl * c, obj.y - hl * s),
+    worldToScreen(obj.x + hl * c, obj.y + hl * s),
+  ];
+}
+
+function hitRotateHandle(sx, sy) {
+  if (state.selectedId === null) return false;
+  const obj = state.objects.find(o => o.id === state.selectedId);
+  if (!obj || obj.type === 'tree') return false;
+  const h = getRotateHandlePos(obj);
+  return Math.hypot(sx - h.x, sy - h.y) <= ROTATE_HANDLE_R + 4;
+}
+
+function hitScaleHandle(sx, sy) {
+  if (state.selectedId === null) return 0;
+  const obj = state.objects.find(o => o.id === state.selectedId);
+  if (!obj || obj.type !== 'fence') return 0;
+  const handles = getFenceScaleHandles(obj);
+  if (Math.hypot(sx - handles[0].x, sy - handles[0].y) <= SCALE_HANDLE_R + 4) return -1;
+  if (Math.hypot(sx - handles[1].x, sy - handles[1].y) <= SCALE_HANDLE_R + 4) return 1;
+  return 0;
+}
+
+// --- Mouse ---
+function onMouseDown(e) {
+  const sx = e.offsetX, sy = e.offsetY;
+  const world = screenToWorld(sx, sy);
+
+  if (state.placingType) {
+    state.placingPos = world;
+    showObjectForm(state.placingType);
+    return;
+  }
+
+  // Scale handle
+  const sh = hitScaleHandle(sx, sy);
+  if (sh !== 0) {
+    state.isScaling = true;
+    state.scaleEnd = sh;
+    state.dragObj = state.objects.find(o => o.id === state.selectedId);
+    canvas.style.cursor = 'ew-resize';
+    return;
+  }
+
+  if (hitRotateHandle(sx, sy)) {
+    state.isRotating = true;
+    state.dragObj = state.objects.find(o => o.id === state.selectedId);
+    canvas.style.cursor = 'grabbing';
+    return;
+  }
+
+  const hit = hitTest(world.x, world.y);
+  if (hit) {
+    state.selectedId = hit.id;
+    state.isDragging = true;
+    state.dragObj = hit;
+    state.dragOffsetX = world.x - hit.x;
+    state.dragOffsetY = world.y - hit.y;
+    canvas.style.cursor = 'move';
+    render(); return;
+  }
+
+  if (state.selectedId !== null) { state.selectedId = null; render(); }
+
+  state.isPanning = true;
+  state.panStartX = sx; state.panStartY = sy;
+  state.panStartPanX = state.panX; state.panStartPanY = state.panY;
+  canvas.style.cursor = 'grabbing';
+}
+
+function onMouseMove(e) {
+  const sx = e.offsetX, sy = e.offsetY;
+
+  if (state.isScaling && state.dragObj) {
+    const world = screenToWorld(sx, sy);
+    const obj = state.dragObj;
+    const c = Math.cos(obj.angle), s = Math.sin(obj.angle);
+    // Project mouse onto fence axis
+    const dx = world.x - obj.x, dy = world.y - obj.y;
+    const proj = dx * c + dy * s;
+    if (state.scaleEnd === 1) {
+      // Dragging positive end — anchor negative end
+      const anchorX = obj.x - (obj.length / 2) * c;
+      const anchorY = obj.y - (obj.length / 2) * s;
+      const newLen = Math.max(1, (proj + obj.length / 2));
+      obj.length = newLen;
+      obj.x = anchorX + (newLen / 2) * c;
+      obj.y = anchorY + (newLen / 2) * s;
+    } else {
+      const anchorX = obj.x + (obj.length / 2) * c;
+      const anchorY = obj.y + (obj.length / 2) * s;
+      const newLen = Math.max(1, (obj.length / 2 - proj));
+      obj.length = newLen;
+      obj.x = anchorX - (newLen / 2) * c;
+      obj.y = anchorY - (newLen / 2) * s;
+    }
+    render(); return;
+  }
+
+  if (state.isRotating && state.dragObj) {
+    const s = worldToScreen(state.dragObj.x, state.dragObj.y);
+    state.dragObj.angle = Math.atan2(sy - s.y, sx - s.x) + Math.PI / 2;
+    render(); return;
+  }
+
+  if (state.isDragging && state.dragObj) {
+    const world = screenToWorld(sx, sy);
+    state.dragObj.x = world.x - state.dragOffsetX;
+    state.dragObj.y = world.y - state.dragOffsetY;
+    render(); return;
+  }
+
+  if (state.isPanning) {
+    state.panX = state.panStartPanX - (sx - state.panStartX) / state.zoom;
+    state.panY = state.panStartPanY - (sy - state.panStartY) / state.zoom;
+    render(); return;
+  }
+
+  if (!state.placingType) {
+    if (hitScaleHandle(sx, sy)) canvas.style.cursor = 'ew-resize';
+    else if (hitRotateHandle(sx, sy)) canvas.style.cursor = 'grab';
+    else { const w = screenToWorld(sx, sy); canvas.style.cursor = hitTest(w.x, w.y) ? 'move' : 'default'; }
+  }
+}
+
+function onMouseUp() {
+  state.isPanning = false; state.isDragging = false;
+  state.isRotating = false; state.isScaling = false;
+  state.dragObj = null;
+  if (!state.placingType) canvas.style.cursor = 'default';
+}
+
+function onWheel(e) {
+  e.preventDefault();
+  const mw = screenToWorld(e.offsetX, e.offsetY);
+  state.zoom = Math.max(1, Math.min(60, state.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+  state.panX = mw.x - (e.offsetX - canvas.width / 2) / state.zoom;
+  state.panY = mw.y - (e.offsetY - canvas.height / 2) / state.zoom;
+  render();
+}
+
+// --- Object form ---
+function showObjectForm(type) {
+  const title = document.getElementById('form-title');
+  const fields = document.getElementById('form-fields');
+  fields.innerHTML = '';
+  const makeField = (label, id, val) => {
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = `<label>${label}</label><input type="number" id="${id}" value="${val}" step="1" min="1">`;
+    fields.appendChild(div);
+  };
+
+  if (type === 'house') {
+    title.textContent = 'Place House';
+    makeField('Width (ft)', 'f-width', 30);
+    makeField('Depth (ft)', 'f-depth', 25);
+    makeField('Height (ft)', 'f-height', 16);
+  } else if (type === 'tree') {
+    title.textContent = 'Place Custom Tree';
+    const h = parseFloat(document.getElementById('draw-height').value) || 25;
+    const w = parseFloat(document.getElementById('draw-width').value) || 20;
+    makeField('Height (ft)', 'f-height', h);
+    makeField('Max Width (ft)', 'f-width', w);
+  } else if (type === 'fence') {
+    title.textContent = 'Place Fence';
+    makeField('Length (ft)', 'f-length', 20);
+    makeField('Height (ft)', 'f-height', 6);
+  }
+
+  objectForm.style.display = 'block';
+  const fi = fields.querySelector('input');
+  if (fi) fi.focus();
+}
+
+function placeObject() {
+  if (!state.placingPos) return;
+  const pos = state.placingPos;
+  let obj;
+
+  if (state.placingType === 'house') {
+    obj = { id: state.nextId++, type: 'house', x: pos.x, y: pos.y, angle: 0,
+      width: parseFloat(document.getElementById('f-width').value) || 30,
+      depth: parseFloat(document.getElementById('f-depth').value) || 25,
+      height: parseFloat(document.getElementById('f-height').value) || 16 };
+  } else if (state.placingType === 'tree') {
+    const h = parseFloat(document.getElementById('f-height').value) || 25;
+    const maxW = parseFloat(document.getElementById('f-width').value) || 20;
+    obj = { id: state.nextId++, type: 'tree', x: pos.x, y: pos.y, angle: 0,
+      treeType: 'custom', radius: maxW / 2, height: h,
+      customLayers: state.pendingCustomLayers,
+      customOutline: state.pendingCustomOutline };
+    state.placingType = null;
+    canvas.style.cursor = 'default';
+  } else if (state.placingType === 'fence') {
+    obj = { id: state.nextId++, type: 'fence', x: pos.x, y: pos.y, angle: 0,
+      length: parseFloat(document.getElementById('f-length').value) || 20,
+      height: parseFloat(document.getElementById('f-height').value) || 6 };
+  }
+
+  if (obj) {
+    state.objects.push(obj);
+    objectForm.style.display = 'none';
+    state.selectedId = obj.id;
+    render();
+  }
+}
+
+// ===================== RENDERING =====================
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawGrid();
+  drawAllShadows();
+  drawAllObjects();
+  drawCompass();
+  updateSunInfo();
+}
+
+function drawGrid() {
+  const tl = screenToWorld(0, 0), br = screenToWorld(canvas.width, canvas.height);
+  let sp = 1;
+  if (state.zoom < 8) sp = 5;
+  if (state.zoom < 3) sp = 10;
+  if (state.zoom < 1.5) sp = 50;
+
+  ctx.strokeStyle = '#e8e8e8'; ctx.lineWidth = 0.5; ctx.beginPath();
+  const sx = Math.floor(tl.x / sp) * sp, sy = Math.floor(tl.y / sp) * sp;
+  for (let wx = sx; wx <= br.x; wx += sp) { const s = worldToScreen(wx, 0); ctx.moveTo(s.x, 0); ctx.lineTo(s.x, canvas.height); }
+  for (let wy = sy; wy <= br.y; wy += sp) { const s = worldToScreen(0, wy); ctx.moveTo(0, s.y); ctx.lineTo(canvas.width, s.y); }
+  ctx.stroke();
+
+  const o = worldToScreen(0, 0);
+  ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.beginPath();
+  ctx.moveTo(o.x, 0); ctx.lineTo(o.x, canvas.height);
+  ctx.moveTo(0, o.y); ctx.lineTo(canvas.width, o.y);
+  ctx.stroke();
+
+}
+
+// --- Shadows ---
+function drawAllShadows() {
+  const sun = getSunPosition();
+  if (sun.altitude <= 0) return;
+  for (const obj of state.objects) {
+    if (obj.type === 'house') { const sv = getShadowVector(obj.height); if (sv) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; drawHouseShadow(obj, sv); } }
+    else if (obj.type === 'tree') drawTreeShadow(obj, sun);
+    else if (obj.type === 'fence') { const sv = getShadowVector(obj.height); if (sv) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; drawFenceShadow(obj, sv); } }
+  }
+}
+
+function getRotatedCorners(obj, hw, hd) {
+  const c = Math.cos(obj.angle), s = Math.sin(obj.angle);
+  return [
+    { x: obj.x - hw * c + hd * s, y: obj.y - hw * s - hd * c },
+    { x: obj.x + hw * c + hd * s, y: obj.y + hw * s - hd * c },
+    { x: obj.x + hw * c - hd * s, y: obj.y + hw * s + hd * c },
+    { x: obj.x - hw * c - hd * s, y: obj.y - hw * s + hd * c },
+  ];
+}
+
+function drawHouseShadow(obj, sv) {
+  const corners = getRotatedCorners(obj, obj.width / 2, obj.depth / 2);
+  const proj = corners.map(c => ({ x: c.x + sv.dx, y: c.y + sv.dy }));
+  const hull = convexHull([...corners, ...proj]);
+  drawHullPath(hull); ctx.fill();
+}
+
+function drawTreeShadow(obj, sun) {
+  const layers = obj.customLayers || [];
+  if (!layers.length) return;
+  const alpha = Math.min(0.18, 0.6 / layers.length);
+  for (const l of layers) {
+    const off = getShadowOffsetForHeight(obj.height * l.hFrac, sun.altitude, sun.azimuth);
+    if (!off) continue;
+    const sc = worldToScreen(obj.x + off.dx, obj.y + off.dy);
+    ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(sc.x, sc.y, obj.radius * l.rFrac * state.zoom, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawFenceShadow(obj, sv) {
+  const c = Math.cos(obj.angle), s = Math.sin(obj.angle), hl = obj.length / 2, ht = 0.3;
+  const lc = [{x:-hl,y:-ht},{x:hl,y:-ht},{x:hl,y:ht},{x:-hl,y:ht}];
+  const corners = lc.map(p => ({ x: obj.x + p.x * c - p.y * s, y: obj.y + p.x * s + p.y * c }));
+  const proj = corners.map(p => ({ x: p.x + sv.dx, y: p.y + sv.dy }));
+  drawHullPath(convexHull([...corners, ...proj])); ctx.fill();
+}
+
+function drawHullPath(hull) {
+  ctx.beginPath();
+  const s0 = worldToScreen(hull[0].x, hull[0].y);
+  ctx.moveTo(s0.x, s0.y);
+  for (let i = 1; i < hull.length; i++) { const s = worldToScreen(hull[i].x, hull[i].y); ctx.lineTo(s.x, s.y); }
+  ctx.closePath();
+}
+
+function convexHull(points) {
+  if (points.length < 3) return points;
+  const pts = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (O, A, B) => (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
+  const lo = [], hi = [];
+  for (const p of pts) { while (lo.length >= 2 && cross(lo[lo.length-2], lo[lo.length-1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { while (hi.length >= 2 && cross(hi[hi.length-2], hi[hi.length-1], pts[i]) <= 0) hi.pop(); hi.push(pts[i]); }
+  hi.pop(); lo.pop();
+  return lo.concat(hi);
+}
+
+// --- Draw objects ---
+function drawAllObjects() {
+  for (const obj of state.objects) {
+    if (obj.type === 'house') drawHouse(obj);
+    else if (obj.type === 'tree') drawTree(obj);
+    else if (obj.type === 'fence') drawFence(obj);
+    if (obj.id === state.selectedId) drawSelection(obj);
+  }
+}
+
+function drawHouse(obj) {
+  const s = worldToScreen(obj.x, obj.y);
+  const w = obj.width * state.zoom, d = obj.depth * state.zoom;
+  ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(obj.angle);
+  ctx.fillStyle = '#c9a96e'; ctx.strokeStyle = '#8B7355'; ctx.lineWidth = 2;
+  ctx.fillRect(-w/2, -d/2, w, d); ctx.strokeRect(-w/2, -d/2, w, d);
+  ctx.fillStyle = '#555'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(`${obj.height} ${UNIT}`, 0, 0);
+  ctx.restore();
+}
+
+function drawTree(obj) {
+  const s = worldToScreen(obj.x, obj.y);
+  const r = obj.radius * state.zoom;
+
+  if (obj.customOutline && obj.customOutline.length > 2) {
+    ctx.fillStyle = '#7abf7a'; ctx.strokeStyle = '#3a8a3a'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(s.x + obj.customOutline[0].x * r, s.y + obj.customOutline[0].y * r);
+    for (let i = 1; i < obj.customOutline.length; i++) ctx.lineTo(s.x + obj.customOutline[i].x * r, s.y + obj.customOutline[i].y * r);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else {
+    ctx.fillStyle = '#6abf6a'; ctx.strokeStyle = '#3a8a3a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+
+  ctx.fillStyle = '#8B6B42'; ctx.beginPath();
+  ctx.arc(s.x, s.y, Math.max(2, r * 0.08), 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#555'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(`${obj.height}${UNIT}`, s.x, s.y + r + 14);
+  ctx.textAlign = 'start';
+}
+
+function drawFence(obj) {
+  const c = Math.cos(obj.angle), sn = Math.sin(obj.angle), hl = obj.length / 2;
+  const s1 = worldToScreen(obj.x - hl * c, obj.y - hl * sn);
+  const s2 = worldToScreen(obj.x + hl * c, obj.y + hl * sn);
+
+  ctx.strokeStyle = '#a07830'; ctx.lineWidth = Math.max(3, 0.5 * state.zoom);
+  ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke(); ctx.lineCap = 'butt';
+
+  const np = Math.max(2, Math.ceil(obj.length / 8));
+  for (let i = 0; i <= np; i++) {
+    const t = i / np - 0.5;
+    const ps = worldToScreen(obj.x + t * obj.length * c, obj.y + t * obj.length * sn);
+    ctx.fillStyle = '#805020'; ctx.beginPath();
+    ctx.arc(ps.x, ps.y, Math.max(2, 0.2 * state.zoom), 0, Math.PI * 2); ctx.fill();
+  }
+
+  const sc = worldToScreen(obj.x, obj.y);
+  ctx.fillStyle = '#555'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(`${obj.height} ${UNIT}`, sc.x, sc.y - Math.max(6, 0.4 * state.zoom) - 4);
+  ctx.textAlign = 'start';
+}
+
+// --- Selection + handles ---
+function drawSelection(obj) {
+  ctx.setLineDash([6, 4]); ctx.strokeStyle = '#e67e22'; ctx.lineWidth = 2;
+
+  if (obj.type === 'house') {
+    const s = worldToScreen(obj.x, obj.y);
+    const w = obj.width * state.zoom + 8, d = obj.depth * state.zoom + 8;
+    ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(obj.angle);
+    ctx.strokeRect(-w/2, -d/2, w, d); ctx.restore();
+  } else if (obj.type === 'tree') {
+    const s = worldToScreen(obj.x, obj.y);
+    ctx.beginPath(); ctx.arc(s.x, s.y, obj.radius * state.zoom + 4, 0, Math.PI * 2); ctx.stroke();
+  } else if (obj.type === 'fence') {
+    const c = Math.cos(obj.angle), sn = Math.sin(obj.angle), hl = obj.length / 2 + 0.5;
+    const s1 = worldToScreen(obj.x - hl * c, obj.y - hl * sn);
+    const s2 = worldToScreen(obj.x + hl * c, obj.y + hl * sn);
+    ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Rotation handle (not for trees)
+  if (obj.type !== 'tree') {
+    const rh = getRotateHandlePos(obj);
+    const sc = worldToScreen(obj.x, obj.y);
+    ctx.strokeStyle = '#e67e22'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(sc.x, sc.y); ctx.lineTo(rh.x, rh.y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#e67e22'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(rh.x, rh.y, ROTATE_HANDLE_R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#e67e22'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(rh.x, rh.y, 4, -Math.PI * 0.7, Math.PI * 0.3); ctx.stroke();
+  }
+
+  // Scale handles for fences
+  if (obj.type === 'fence') {
+    const handles = getFenceScaleHandles(obj);
+    for (const h of handles) {
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#2c6fbb'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.rect(h.x - SCALE_HANDLE_R, h.y - SCALE_HANDLE_R, SCALE_HANDLE_R * 2, SCALE_HANDLE_R * 2);
+      ctx.fill(); ctx.stroke();
+    }
+  }
+}
+
+// --- Compass ---
+function drawCompass() {
+  const cx = canvas.width - 50, cy = canvas.height - 50, r = 30;
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, r + 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  [{l:'N',dx:0,dy:-1,p:1},{l:'E',dx:1,dy:0},{l:'S',dx:0,dy:1},{l:'W',dx:-1,dy:0}].forEach(d => {
+    ctx.fillStyle = d.p ? '#c0392b' : '#888';
+    ctx.font = d.p ? 'bold 13px sans-serif' : '11px sans-serif';
+    ctx.fillText(d.l, cx + d.dx * (r - 8), cy + d.dy * (r - 8));
+  });
+
+  ctx.fillStyle = '#c0392b'; ctx.beginPath();
+  ctx.moveTo(cx, cy - r + 18); ctx.lineTo(cx - 4, cy - 4); ctx.lineTo(cx + 4, cy - 4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ccc'; ctx.beginPath();
+  ctx.moveTo(cx, cy + r - 18); ctx.lineTo(cx - 4, cy + 4); ctx.lineTo(cx + 4, cy + 4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#666'; ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+}
+
+function updateSunInfo() {
+  const sun = getSunPosition();
+  const info = document.getElementById('sun-info');
+  if (sun.altitude <= 0) { info.textContent = 'Sun: below horizon'; return; }
+  const alt = (sun.altitude * 180 / Math.PI).toFixed(1);
+  const az = ((sun.azimuth * 180 / Math.PI + 180) % 360).toFixed(1);
+  info.textContent = `Sun: alt ${alt}\u00B0 az ${az}\u00B0`;
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
